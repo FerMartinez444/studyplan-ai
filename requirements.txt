@@ -1,0 +1,6 @@
+langchain>=1.0
+langgraph
+langchain-google-genai
+streamlit
+python-dotenv
+pytest
