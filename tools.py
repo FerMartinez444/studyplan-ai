@@ -6,35 +6,15 @@ from langchain.tools import tool
 from planning import(
     calcular_disponibilidad_base,
     generar_cronograma_base,
+    aplicar_pomodoro,
+)
+
+from rag import(
+    buscar_conocimiento,
+    obtener_programa_completo,
 )
 
 BASE = Path(__file__).resolve().parent
-
-@tool
-def consultar_estrategia(estrategia: str) -> str:
-    """Consulta las reglas de planificacion academica.
-    Valores admitidos: priorizacion, distribucion y replanificacion.
-    """
-    try:
-        estrategias = {
-            "priorizacion",
-            "distribucion",
-            "replanificacion",
-        }
-
-        if estrategia not in estrategias:
-            return "ERROR: estrategia no reconocida."
-
-        ruta = BASE / "skills" / f"{estrategia}.md"
-
-        contenido = ruta.read_text(
-            encoding="utf-8"
-        )
-
-        return f"Fuente: {ruta.name}\n{contenido}"
-
-    except Exception as error:
-        return f"ERROR al consultar la skill: {error}"
 
 @tool
 def calcular_disponibilidad(
@@ -65,6 +45,10 @@ def generar_cronograma(
     disponibilidad_json: str,
     temas: list[str],
     dificultades: list[int],
+    metodologia: str = "ninguna",
+    minutos_estudio: int = 25,
+    minutos_descanso: int = 5,
+
 ) -> str:
     """Genera un cronograma validado.
     Recibe la disponibilidad obtenida de la herramienta calcular_disponibilidad.
@@ -80,6 +64,17 @@ def generar_cronograma(
             temas,
             dificultades,
         )
+
+        if metodologia.lower() == "pomodoro":
+            cronograma = aplicar_pomodoro(
+                cronograma,
+                minutos_estudio,
+                minutos_descanso,
+            )
+        elif metodologia.lower() != "ninguna":
+            raise ValueError(
+                "Metodologia tovadia no implementada."
+            )
 
         return json.dumps(
             resultado,
@@ -135,3 +130,65 @@ def exportar_cronograma(
         })
     except Exception as error:
         return f"ERROR: {error}"
+
+def crear_tools_rag(sesion_id:str):
+
+    @tool
+    def consultar_material(
+        consulta:str,
+        categoria:str,
+        fuente: str = "",
+    ) -> str:
+        """Consulta documentos del RAG
+        por categoria y fuente.
+        """
+
+        try:
+            resultados = buscar_conocimiento(
+                consulta=consulta,
+                categoria=categoria,
+                sesion_id=sesion_id,
+                fuente=fuente,
+            )
+
+            return json.dumps(
+                resultados,
+                ensure_ascii=False,
+            )
+
+        except Exception as error:
+            return f"ERROR RAG: {error}"
+
+    @tool
+    def consultar_programa_completo(
+        documento_id: str,
+    ) -> str:
+        """Recupera todas las paginas de un programa
+        previamente cargado. Utilizar cuando sea
+        necesario identificar todas sus unidades.
+        """
+
+        try:
+            programa = obtener_programa_completo(
+                sesion_id=sesion_id,
+                documento_id=documento_id,
+            )
+
+            contenido = json.dumps(
+                programa,
+                ensure_ascii=False,
+            )
+
+            if len(contenido) > 20000:
+                return(
+                    "ERROR: programa demasiado extenso "
+                    "para esta consulta completa. "
+                    "Debe procesarse por partes."
+                )
+
+            return contenido
+
+        except Exception as error:
+            return f"ERROR PROGRAMA: {error}"
+
+    return consultar_material, consultar_programa_completo

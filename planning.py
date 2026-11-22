@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+from copy import deepcopy
+from math import isfinite
 
 def calcular_disponibilidad_base(
         fecha_inicio: str,
@@ -134,3 +136,87 @@ def generar_cronograma_base(
             for i in range(len(temas))
         },
     }
+
+def aplicar_pomodoro(
+        cronograma: dict,
+        minutos_estudio: int=25,
+        minutos_descanso: int=5,
+) -> dict:
+    """Aplicar bloques Pomodoro a un cronograma existente."""
+    if (
+        not isinstance(minutos_estudio, int)
+        or not isinstance(minutos_descanso, int)
+        or minutos_estudio <= 0
+        or minutos_descanso < 0
+    ):
+        raise ValueError("Duraciones Pomodoro invalidas.")
+
+    if "cronograma" not in cronograma:
+        raise ValueError("El cronograma no tiene actividades.")
+
+    resultado = deepcopy(cronograma)
+
+    duracion_ciclo = minutos_estudio + minutos_descanso
+
+    total_estudio = 0
+    total_descanso = 0
+
+    for dia in resultado["cronograma"]:
+        for actividad in dia["actividades"]:
+            horas = float(actividad["horas"])
+
+            if not isfinite(horas) or horas <= 0:
+                raise ValueError(
+                    "Una actividad tiene horas invalidas."
+                )
+
+            minutos_disponibles = round(horas * 60)
+
+            ciclos = minutos_disponibles // duracion_ciclo
+
+            minutos_restantes = (
+                minutos_disponibles % duracion_ciclo
+            )
+
+            estudio = ciclos * minutos_estudio
+            descanso = ciclos * minutos_descanso
+
+            estudio_extra = min(
+                minutos_restantes,
+                minutos_estudio,
+            )
+
+            estudio += estudio_extra
+
+            descanso += minutos_restantes - estudio_extra
+
+            actividad["actividad"] = (
+                f"Pomodoro: {ciclos} ciclos de "
+                f"{minutos_estudio} min de estudio y "
+                f"{minutos_descanso} min de descanso"
+            )
+
+            if estudio_extra > 0:
+                actividad["actividad"] += (
+                    f" + {estudio_extra} min de estudio"
+                )
+
+            actividad["metodologia"] = "Pomodoro"
+            actividad["ciclos"] = ciclos
+            actividad["minutos_estudio"] = estudio
+            actividad["minutos_descanso"] = descanso
+
+            total_estudio += estudio
+            total_descanso += descanso
+
+    resultado["metodologia"] = "Pomodoro"
+    resultado["configuracion_metodologia"] = {
+        "minutos_estudio": minutos_estudio,
+        "minutos_descanso": minutos_descanso,
+    }
+
+    resultado["total_minutos_estudio"] = total_estudio
+    resultado["total_minutos_descanso"] = total_descanso
+
+    return resultado
+

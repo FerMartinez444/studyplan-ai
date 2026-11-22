@@ -4,3 +4,9 @@ langchain-google-genai
 streamlit
 python-dotenv
 pytest
+pypdf
+langchain-text-splitters
+langchain-chroma
+chromadb
+langchain-huggingface
+sentence-transformers

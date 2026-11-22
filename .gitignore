@@ -11,3 +11,7 @@ __pycache__/
 outputs/*.csv
 
 .vscode/
+
+chroma_db/
+documentos/
+programas_extraidos/
