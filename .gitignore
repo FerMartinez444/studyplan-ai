@@ -1,17 +1,25 @@
+# Entorno virtual
+.venv/
+venv/
+
+# Credenciales
 .env
 .env.*
 !.env.example
 
-.venv/
-
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
 
-outputs/*.csv
+# Base vectorial
+chroma_bd/
 
-.vscode/
-
-chroma_db/
-documentos/
+# Documentos y archivos generados
+programas_usuario/
 programas_extraidos/
+outputs/
+
+# Configuraciones locales
+.idea/
+.vscode/
+.streamlit/secrets.toml

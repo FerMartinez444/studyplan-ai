@@ -1,5 +1,4 @@
 import hashlib
-import json
 from io import BytesIO
 from pathlib import Path
 
@@ -15,9 +14,8 @@ from langchain_text_splitters import (
 BASE = Path(__file__).resolve().parent
 
 RUTA_BD = BASE / "chroma_bd"
-RUTA_PROGRAMAS = BASE / "programas_extraidos"
 
-CATEGORIAS = {"programa", "metodologia"}
+CATEGORIAS = {"metodologia"}
 
 # Modelo para generar embeddings
 embeddings = HuggingFaceEmbeddings(
@@ -121,23 +119,6 @@ def ingestar_pdf(
         ids=ids,
     )
 
-    if categoria == "programa":
-        carpeta = RUTA_PROGRAMAS / sesion_id
-        carpeta.mkdir(parents=True, exist_ok=True)
-
-        ruta = carpeta / f"{documento_id}.json"
-
-        ruta.write_text(
-            json.dumps(
-                {
-                    "fuente": nombre_seguro,
-                    "paginas": paginas,
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-
     return{
         "documento_id": documento_id,
         "archivo": nombre_seguro,
@@ -190,26 +171,4 @@ def buscar_conocimiento(
             "categoria":documento.metadata["categoria"],
         })
     return resultados
-
-def obtener_programa_completo(
-        sesion_id: str,
-        documento_id: str,
-) -> dict:
-    """Lee todas las paginas de un programa ta integrido."""
-
-    if not sesion_id or not documento_id:
-        raise ValueError("Faltan identificadores.")
-
-    ruta = (
-        RUTA_PROGRAMAS
-        / sesion_id
-        / f"{documento_id}.json"
-    )
-
-    if not ruta.is_file():
-        raise FileNotFoundError(
-            "No se encontro el programa solicitado."
-        )
-
-    return json.loads(ruta.read_text(encoding="utf-8"))
 

@@ -1,4 +1,3 @@
-
 import json
 import uuid
 from pathlib import Path
@@ -7,7 +6,8 @@ import streamlit as st
 from langchain_core.messages import AIMessage, ToolMessage
 
 from agent import crear_agente
-from rag import ingestar_pdf
+from programas import registrar_programa
+
 
 
 # CONFIGURACION GENERAL
@@ -41,67 +41,52 @@ if "programa_id" not in st.session_state:
 if "programa_nombre" not in st.session_state:
     st.session_state.programa_nombre = None
 
-if "metodologias_cargadas" not in st.session_state:
-    st.session_state.metodologias_cargadas = []
-
-
 # CARGA DE DOCUMENTOS
+
+
+# CARGA DEL PROGRAMA ACADEMICO
 
 with st.sidebar:
 
     st.header("Configuracion del estudio")
 
-    st.subheader("Documentos")
-
-    categoria = st.selectbox(
-        "Tipo de documento",
-        ["programa", "metodologia"],
-    )
+    st.subheader("Programa de la materia")
 
     archivo = st.file_uploader(
-        "Selecciona un PDF",
+        "Selecciona el programa academico en PDF",
         type=["pdf"],
     )
 
-    if st.button("Incorporar documento"):
+    if st.button("Incorporar programa"):
 
         if archivo is None:
-            st.warning("Primero selecciona un archivo.")
+            st.warning("Primero selecciona un PDF.")
 
         else:
             try:
-                with st.spinner("Procesando PDF..."):
+                resultado = registrar_programa(
+                    contenido=archivo.getvalue(),
+                    nombre=archivo.name,
+                    sesion_id=st.session_state.thread_id,
+                )
 
-                    resultado = ingestar_pdf(
-                        contenido=archivo.getvalue(),
-                        nombre=archivo.name,
-                        categoria=categoria,
-                        sesion_id=st.session_state.thread_id,
-                    )
+                st.session_state.programa_id = (
+                    resultado["documento_id"]
+                )
 
-                if categoria == "programa":
-                    st.session_state.programa_id = (
-                        resultado["documento_id"]
-                    )
-                    st.session_state.programa_nombre = (
-                        resultado["archivo"]
-                    )
-
-                else:
-                    nombre = resultado["archivo"]
-
-                    if nombre not in st.session_state.metodologias_cargadas:
-                        st.session_state.metodologias_cargadas.append(
-                            nombre
-                        )
+                st.session_state.programa_nombre = (
+                    resultado["archivo"]
+                )
 
                 st.success(
-                    f"Documento incorporado. "
-                    f"Fragmentos: {resultado['fragmentos']}"
+                    "Programa registrado correctamente. "
+                    "El agente lo procesara cuando sea necesario."
                 )
 
             except Exception as error:
-                st.error(f"Error al procesar el PDF: {error}")
+                st.error(
+                    f"Error al registrar programa: {error}"
+                )
 
     if st.session_state.programa_nombre:
         st.info(
@@ -118,6 +103,7 @@ with st.sidebar:
             "Repeticion espaciada",
         ],
     )
+
 
 for mensaje in st.session_state.mensajes:
     with st.chat_message(mensaje["rol"]):
@@ -161,8 +147,16 @@ if consulta:
     {fuente_elegida}
 
     INSTRUCCIONES:
-    - Si hay un programa cargado, consulta su contenido completo mediante consultar_programa_completo.
-    - Consulta las reglas de la metodologia seleccionada mediante consultar_material.
+    - Si hay un programa cargado, utiliza ingestar_programa
+      para recuperar su contenido.
+    - Identifica las unidades academicas respetando
+      los nombres y el orden original.
+    - Consulta las reglas de la metodologia seleccionada
+      mediante consultar_conocimiento.
+    - Consulta tambien los criterios generales de
+      priorizacion y distribucion del estudio
+      desde priorizacion_repaso.pdf cuando corresponda
+      generar o reorganizar un cronograma.
     - Respeta los horarios indicados por el estudiante.
     - No inventes unidades ni reglas metodologicas.
     - Limita tu respuesta a la planificacion del estudio.
