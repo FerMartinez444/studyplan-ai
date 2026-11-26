@@ -160,8 +160,9 @@ def generar_cronograma_base(
 
 
 
+
 def aplicar_pomodoro(cronograma: dict) -> dict:
-    """Aplica Pomodoro con parametros fijos al cronograma."""
+    """Aplica Pomodoro de forma continua durante cada jornada."""
 
     MINUTOS_ESTUDIO = 25
     DESCANSO_CORTO = 5
@@ -180,10 +181,12 @@ def aplicar_pomodoro(cronograma: dict) -> dict:
 
     for dia in resultado["cronograma"]:
 
-        ciclos_del_dia = 0
+        actividades = dia["actividades"]
 
-        for actividad in dia["actividades"]:
+        # Preparar las actividades y sus tiempos disponibles.
+        capacidades = []
 
+        for actividad in actividades:
             horas = float(actividad["horas"])
 
             if not isfinite(horas) or horas <= 0:
@@ -191,96 +194,139 @@ def aplicar_pomodoro(cronograma: dict) -> dict:
                     "Una actividad tiene horas invalidas."
                 )
 
-            minutos_disponibles = round(horas * 60)
-
-            minutos_restantes = minutos_disponibles
-
-            estudio = 0
-            descanso = 0
-            ciclos = 0
-            descansos_largos = 0
-            sesiones = []
-
-            while minutos_restantes > 0:
-
-                # Estudiar hasta 25 minutos.
-                bloque_estudio = min(
-                    MINUTOS_ESTUDIO,
-                    minutos_restantes,
-                )
-
-                sesiones.append({
-                    "tipo": "estudio",
-                    "minutos": bloque_estudio,
-                })
-
-                estudio += bloque_estudio
-                minutos_restantes -= bloque_estudio
-
-                # Un ciclo completo requiere 25 min de estudio.
-                if bloque_estudio < MINUTOS_ESTUDIO:
-                    break
-
-                ciclos += 1
-                ciclos_del_dia += 1
-
-                # Si no queda tiempo, no agregamos descanso.
-                if minutos_restantes == 0:
-                    break
-
-                es_descanso_largo = (
-                    ciclos_del_dia
-                    % CICLOS_DESCANSO_LARGO == 0
-                )
-
-                duracion_descanso = (
-                    DESCANSO_LARGO
-                    if es_descanso_largo
-                    else DESCANSO_CORTO
-                )
-
-                # Solo programamos el descanso si cabe
-                # y queda tiempo para seguir estudiando.
-                if minutos_restantes > duracion_descanso:
-
-                    sesiones.append({
-                        "tipo": (
-                            "descanso_largo"
-                            if es_descanso_largo
-                            else "descanso_corto"
-                        ),
-                        "minutos": duracion_descanso,
-                    })
-
-                    descanso += duracion_descanso
-                    minutos_restantes -= duracion_descanso
-
-                    if es_descanso_largo:
-                        descansos_largos += 1
-
-                else:
-                    # Aprovechamos los minutos restantes
-                    # como una sesion corta de estudio.
-                    sesiones.append({
-                        "tipo": "estudio",
-                        "minutos": minutos_restantes,
-                    })
-
-                    estudio += minutos_restantes
-                    minutos_restantes = 0
+            capacidades.append(round(horas * 60))
 
             actividad["metodologia"] = "Pomodoro"
-            actividad["actividad"] = "Estudio con tecnica Pomodoro"
-            actividad["ciclos"] = ciclos
-            actividad["descansos_largos"] = descansos_largos
-            actividad["minutos_estudio"] = estudio
-            actividad["minutos_descanso"] = descanso
-            actividad["sesiones"] = sesiones
+            actividad["ciclos"] = 0
+            actividad["descansos_largos"] = 0
+            actividad["minutos_estudio"] = 0
+            actividad["minutos_descanso"] = 0
+            actividad["sesiones"] = []
 
-            total_estudio += estudio
-            total_descanso += descanso
-            total_ciclos += ciclos
-            total_descansos_largos += descansos_largos
+        minutos_restantes = sum(capacidades)
+        ciclos_del_dia = 0
+
+        # Construir una secuencia para TODO el dia.
+        sesiones_dia = []
+
+        while minutos_restantes > 0:
+
+            bloque = min(
+                MINUTOS_ESTUDIO,
+                minutos_restantes,
+            )
+
+            sesiones_dia.append({
+                "tipo": "estudio",
+                "minutos": bloque,
+            })
+
+            minutos_restantes -= bloque
+
+            if bloque < MINUTOS_ESTUDIO:
+                break
+
+            ciclos_del_dia += 1
+
+            if minutos_restantes == 0:
+                break
+
+            descanso_largo = (
+                ciclos_del_dia
+                % CICLOS_DESCANSO_LARGO == 0
+            )
+
+            duracion = (
+                DESCANSO_LARGO
+                if descanso_largo
+                else DESCANSO_CORTO
+            )
+
+            # El descanso debe caber y dejar tiempo
+            # para continuar estudiando.
+            if minutos_restantes > duracion:
+
+                sesiones_dia.append({
+                    "tipo": (
+                        "descanso_largo"
+                        if descanso_largo
+                        else "descanso_corto"
+                    ),
+                    "minutos": duracion,
+                })
+
+                minutos_restantes -= duracion
+
+            else:
+                sesiones_dia.append({
+                    "tipo": "estudio",
+                    "minutos": minutos_restantes,
+                })
+
+                minutos_restantes = 0
+
+        # Distribuir las sesiones entre las actividades,
+        # sin reiniciar el contador al cambiar de unidad.
+        indice = 0
+
+        for sesion in sesiones_dia:
+
+            restante = sesion["minutos"]
+
+            while restante > 0:
+
+                while (
+                    indice < len(actividades)
+                    and capacidades[indice] == 0
+                ):
+                    indice += 1
+
+                if indice >= len(actividades):
+                    raise ValueError(
+                        "No hay espacio para asignar la sesion."
+                    )
+
+                actividad = actividades[indice]
+
+                fragmento = min(
+                    restante,
+                    capacidades[indice],
+                )
+
+                actividad["sesiones"].append({
+                    "tipo": sesion["tipo"],
+                    "minutos": fragmento,
+                })
+
+                capacidades[indice] -= fragmento
+                restante -= fragmento
+
+                es_estudio = sesion["tipo"] == "estudio"
+
+                if es_estudio:
+                    actividad["minutos_estudio"] += fragmento
+                    total_estudio += fragmento
+
+                else:
+
+                    actividad["minutos_descanso"] += fragmento
+                    total_descanso += fragmento
+
+                # Se registra el ciclo donde termina
+                # su bloque completo de 25 minutos.
+                if restante == 0:
+
+                    if (
+                        es_estudio
+                        and sesion["minutos"]
+                        == MINUTOS_ESTUDIO
+                    ):
+                        actividad["ciclos"] += 1
+                        total_ciclos += 1
+
+                    if sesion["tipo"] == "descanso_largo":
+                        actividad["descansos_largos"] += 1
+                        total_descansos_largos += 1
 
     resultado["metodologia"] = "Pomodoro"
 
@@ -297,8 +343,7 @@ def aplicar_pomodoro(cronograma: dict) -> dict:
     resultado["total_descansos_largos"] = total_descansos_largos
 
     return resultado
-
-
+    
 def generar_cronograma_espaciado(
     disponibilidad: dict,
     temas: list[str],

@@ -23,3 +23,12 @@ outputs/
 .idea/
 .vscode/
 .streamlit/secrets.toml
+
+# Persistencia de conversaciones
+*.sqlite3
+*.sqlite-shm
+*.sqilte-wal
+
+# Datos persistentes del agente
+datos/
+

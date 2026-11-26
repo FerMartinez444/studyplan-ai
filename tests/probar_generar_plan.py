@@ -42,7 +42,10 @@ for metodo in ["pomodoro", "repeticion_espaciada"]:
     if metodo == "pomodoro":
         assert datos["total_ciclos"] > 0
         assert datos["total_minutos_estudio"] > 0
-        assert any(fila["Ciclos"] for fila in filas)
+        assert any(
+            int(fila["Ciclos Pomodoro"]) > 0
+            for fila in filas
+        )
 
     else:
         assert datos["repasos_programados"] > 0
@@ -51,7 +54,7 @@ for metodo in ["pomodoro", "repeticion_espaciada"]:
             for fila in filas
         )
         assert any(
-            fila["Fecha objetivo de repaso"]
+            fila["Fecha ideal del repaso"]
             for fila in filas
         )
 

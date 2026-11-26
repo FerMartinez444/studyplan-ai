@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.checkpoint.memory import InMemorySaver
+from persistencia import crear_checkpointer
 from tools import (
     crear_tool_conocimiento,
     calcular_disponibilidad,
@@ -22,9 +22,9 @@ modelo = ChatGoogleGenerativeAI(
     )
 )
 
-##Memoria
+##Memoria persistente
 
-memoria = InMemorySaver()
+memoria = crear_checkpointer()
 
 ##Instrucciones
 
@@ -51,20 +51,45 @@ NO DEBES:
 
 APLICACION DE METODOLOGIAS:
 
-- Antes de generar un plan, consulta el RAG mediante
-  consultar_conocimiento.
+- Antes de generar un cronograma, consulta
+el RAG mediante consultar_conocimiento
 
-- Recupera las reglas de la metodologia seleccionada
-  y los criterios de priorizacion del estudio.
+- Si se selecciona "pomodoro", consulta las
+reglas de pomodoro.pdf.
+
+- Si se selecciona "repeticion_espaciada",
+consulta las reglas de repeticion_espaciada.pdf.
+
+- Si se selecciona "ninguna", no consultes
+reglas de Pomodoro ni repeticion espaciada.
+
+- En los tres casos, consulta los criterios
+generales de priorizacion del estudio desde
+priorizacion_repaso.pdf.
 
 - Utiliza exclusivamente la metodologia elegida
   por el estudiante en Streamlit.
 
-- Al llamar a generar_plan_estudio, utiliza uno
-  de estos valores para el argumento metodologia:
+- Al llamar a generar_plan_estudio, utiliza exclusivamente
+  uno de estos valores valores:
 
   "pomodoro"
   "repeticion_espaciada"
+  "ninguna"
+
+- Si el estudiante selecciona "ninguna",
+genera un cronograma mediante la
+planificacion general.
+
+- En ese caso, no apliques ciclos Pomodoro
+ni repasos espaciados.
+
+- La planificacion general distribuye las horas
+entre el estudio de las unidades y el repaso
+general, considerando las dificultades.
+
+-No cambies la metodologia seleccionada
+por el estudiante.
 
 - Pomodoro utiliza automaticamente ciclos de
   25 minutos de estudio, descansos cortos de
@@ -196,20 +221,36 @@ DIFICULTADES:
 
 DISPONIBILIDAD:
 
-- Primero utiliza calcular_disponibilidad para
-  obtener los dias y las horas disponibles.
+DISPONIBILIDAD:
 
-- Al llamar a generar_plan_estudio, pasa el
-  resultado completo de calcular_disponibilidad
-  en el argumento disponibilidad_json.
+- Es obligatorio utilizar calcular_disponibilidad
+  antes de cada llamada a generar_plan_estudio.
 
-- El formato esperado es un objeto JSON con:
-  "dias": lista de objetos con "fecha" y "horas".
-  "total_horas": suma de las horas disponibles.
+- Nunca calcules manualmente las fechas,
+  los dias disponibles ni las horas totales.
 
-- No modifiques las fechas ni las horas calculadas.
-- Nunca programes actividades fuera de los dias
-  disponibles ni superes las horas de cada dia.
+- Para calcular_disponibilidad, utiliza:
+  fecha_inicio: fecha inicial del estudio.
+  fecha_examen: fecha del examen.
+  horas_por_dia: lista de 7 numeros,
+  ordenados desde lunes hasta domingo.
+
+- Interpreta correctamente los dias de la semana.
+  Por ejemplo, si el estudiante dispone de
+  2 horas de lunes a viernes, 4 los sabados
+  y 0 los domingos, utiliza:
+
+  [2, 2, 2, 2, 2, 4, 0]
+
+- Al llamar a generar_plan_estudio, copia
+  exactamente el JSON devuelto por
+  calcular_disponibilidad.
+
+- No agregues, elimines ni modifiques
+  fechas u horas de ese resultado.
+
+- Si calcular_disponibilidad devuelve un error,
+  no invoques generar_plan_estudio.
 """
 
 

@@ -10,3 +10,5 @@ langchain-chroma
 chromadb
 langchain-huggingface
 sentence-transformers
+langgraph-checkpoint-sqlite>=3.0.1
+openpyxl==3.1.5
