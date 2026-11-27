@@ -1,6 +1,6 @@
 # 📚 StudyPlan AI
 
-** Agente inteligente para la planificacion académica**
+**Agente inteligente para la planificacion académica**
 
 Trabajo Integrador - Modelos de Lenguaje
 Ingeniería en Sistemas de Información - UTN FRM
