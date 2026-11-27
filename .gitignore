@@ -25,10 +25,10 @@ outputs/
 .streamlit/secrets.toml
 
 # Persistencia de conversaciones
+*.sqlite
 *.sqlite3
 *.sqlite-shm
-*.sqilte-wal
+*.sqlite-wal
 
 # Datos persistentes del agente
 datos/
-

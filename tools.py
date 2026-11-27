@@ -3,6 +3,7 @@ import unicodedata
 from datetime import date
 import csv
 import json
+import hashlib
 from pathlib import Path
 from uuid import uuid4
 from langchain.tools import tool
@@ -13,6 +14,11 @@ from planning import(
     generar_cronograma_espaciado,
 )
 
+from disponibilidad_segura import(
+    registrar_disponibilidad,
+    recuperar_disponibilidad,
+)
+
 from rag import buscar_conocimiento
 
 from openpyxl import Workbook
@@ -20,6 +26,12 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 BASE = Path(__file__).resolve().parent
+def carpeta_outputs_sesion(sesion_id: str) -> Path:
+    identificador = hashlib.sha256(
+        sesion_id.encode("utf-8")
+    ).hexdigest()
+
+    return BASE / "outputs" / identificador
 
 @tool
 def calcular_disponibilidad(
@@ -251,7 +263,7 @@ def guardar_plan_excel(
     resumen.append(["RESUMEN DEL PLAN DE ESTUDIO"])
     resumen.append([])
     resumen.append(["Materia", materia])
-    resumen.append(["Metodologiad", metodologia])
+    resumen.append(["Metodologia", metodologia])
     resumen.append([
         "Dias de estudio",
         len(cronograma["cronograma"])
@@ -330,7 +342,7 @@ def guardar_plan_excel(
         for actividad in dia["actividades"]:
 
             datos_fila = [
-                fila,
+                fecha,
                 actividad["tema"],
                 actividad["actividad"],
                 round(actividad["horas"] * 60),
@@ -601,10 +613,124 @@ def generar_plan_estudio(
             ensure_ascii=False,
         )
 
+def crear_tools_planificacion(sesion_id: str):
+    """Crea las herramientas ed planificacion de una sesion."""
 
+    @tool("calcular_disponibilidad")
+    def calcular_disponibilidad_segura(
+        fecha_inicio: str,
+        fecha_examen: str,
+        horas_por_dia: list[float],
+    ) -> str:
+        """Calcula y guarda los dias y horas disponibles.
+        Las fechas utilizan AAAA-MM-DD.
+        Las horas se indican de lunes a domingo.
+        Devuelve el identificador para generar_plan_estudio.
+        """
 
+        try:
+            datos = calcular_disponibilidad_base(
+                fecha_inicio,
+                fecha_examen,
+                horas_por_dia,
+            )
 
+            identificador = registrar_disponibilidad(
+                sesion_id,
+                datos,
+            )
 
+            return json.dumps({
+                "estado": "correcto",
+                "disponibilidad_id": identificador,
+                "cantidad_dias": len(datos["dias"]),
+                "total_horas": datos["total_horas"],
+            }, ensure_ascii=False)
 
+        except Exception as error:
+            return json.dumps({
+                "estado": "error",
+                "mensaje": str(error),
+            }, ensure_ascii=False)
 
+    @tool("generar_plan_estudio")
+    def generar_plan_estudio_seguro(
+        disponibilidad_id: str,
+        temas: list[str],
+        dificultades: list[int],
+        metodologia: str,
+        materia: str = "Materia",
+    ) -> str:
+        """Genera y exporta un plan de estudio.
+        Requiere el identificador devuelto por
+        calcular_disponibilidad.
+        
+        Metodologias:
+        pomodoro, repeticion_espaciada o ninguna.
+        """
 
+        try:
+            disponibilidad = recuperar_disponibilidad(
+                sesion_id,
+                disponibilidad_id,
+            )
+
+            # Reutilizar la herramienta ya implementada.
+            resultado_texto = generar_plan_estudio.invoke({
+                "disponibilidad_json": json.dumps(
+                    disponibilidad,
+                    ensure_ascii=False,
+                ),
+            "temas": temas,
+            "dificultades": dificultades,
+            "metodologia": metodologia,
+            "materia": materia,
+            })
+
+            resultado = json.loads(resultado_texto)
+
+            if resultado.get("estado") != "correcto":
+                return resultado_texto
+
+            # Guardamos los archivos en la carpeta de esta conversacion.
+            destino = carpeta_outputs_sesion(sesion_id)
+            destino.mkdir(parents=True, exist_ok=True)
+
+            for campo in ("archivo", "archivo_excel"):
+                nombre = resultado.get(campo)
+
+                if not nombre:
+                    continue
+
+                origen = BASE / "outputs" / Path(nombre).name
+
+                if not origen.is_file():
+                    raise FileNotFoundError(
+                        f"No se encontro el archivo generado: {nombre}"
+                    )
+
+                ruta_destino = destino / origen.name
+
+                # Evitar sobrescribir archivos existentes.
+
+                if ruta_destino.exists():
+                    ruta_destino = destino / (
+                        f"{origen.stem}_{uuid4().hex[:8]}{origen.suffix}"
+                    )
+
+                origen.replace(ruta_destino)
+
+                resultado[campo] = ruta_destino.name
+
+            return json.dumps(resultado, ensure_ascii=False)
+
+        except Exception as error:
+            return json.dumps({
+                "estado": "error",
+                "mensaje": str(error),
+            }, ensure_ascii=False)
+
+    return (
+        calcular_disponibilidad_segura,
+        generar_plan_estudio_seguro,
+    )

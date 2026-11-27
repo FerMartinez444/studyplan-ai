@@ -11,6 +11,10 @@ from langchain_core.messages import(
 
 from agent import crear_agente
 from programas import registrar_programa
+from tools import carpeta_outputs_sesion
+
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 def extraer_texto(mensaje):
     contenido = mensaje.content
@@ -71,7 +75,43 @@ def recuperar_mensajes(agente, thread_id):
                     })
     return mensajes
 
-                
+def recuperar_metodologia(agente, thread_id):
+    configuracion = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }
+
+    estado = agente.get_state(configuracion)
+
+    opciones = (
+        "Sin metodologia",
+        "Pomodoro",
+        "Repetición espaciada",
+    )
+
+    for mensaje in reversed(
+        estado.values.get("messages", [])
+    ):
+        if not isinstance(mensaje, HumanMessage):
+            continue
+
+        texto = extraer_texto(mensaje)
+
+        if "METODOLOGIA ELEGIDA:" not in texto:
+            continue
+
+        valor = texto.split(
+            "METODOLOGIA ELEGIDA:", 1
+        )[1].splitlines()
+
+        for linea in valor:
+            seleccion = linea.strip()
+
+            if seleccion in opciones:
+                return seleccion
+
+    return "Sin metodologia"
 
 # CONFIGURACION GENERAL
 
@@ -145,6 +185,12 @@ with st.sidebar:
                 st.session_state.thread_id = id_validado
                 st.session_state.agente = agente_recuperado
                 st.session_state.mensajes = mensajes_recuperados
+                st.session_state.metodologia_selector = (
+                    recuperar_metodologia(
+                        agente_recuperado,
+                        id_validado,
+                    )
+                )
 
                 st.session_state.programa_id = None
                 st.session_state.programa_nombre = None
@@ -171,6 +217,10 @@ with st.sidebar:
 
         st.session_state.programa_id = None
         st.session_state.programa_nombre = None
+
+        st.session_state.metodologia_selector = (
+            "Sin metodologia"
+        )
 
         st.rerun()
 
@@ -238,6 +288,7 @@ with st.sidebar:
             "Pomodoro",
             "Repeticion espaciada",
         ],
+        key="metodologia_selector",
     )
 
 
@@ -269,7 +320,25 @@ if consulta:
 
     programa_id = st.session_state.programa_id
 
+    hoy = datetime.now(
+        ZoneInfo("America/Argentina/Mendoza")
+    ).date()
+
+    maniana = hoy + timedelta(days=1)
+    
     consulta_completa = f"""
+    CONTEXTO TEMPORAL:
+    Fecha actual: {hoy.isoformat()}
+    Fecha de mañana: {maniana.isoformat()}
+    Zona horaria: America/Argentina/Mendoza.
+
+    - Interpreta "hoy" y "mañana" utilizando estas fechas.
+    - No utilices fechas de años anteriores.
+    -Si el usuario indica 12/12 sin año, utiliza el
+    proximo 12 de diciembre que no haya pasado.
+    - Antes de calcular disponibilidad, verifica que
+    las fechas correspondan a la solicitud.
+
     SOLICITUD DEL ESTUDIANTE:
     {consulta}
 
@@ -454,39 +523,58 @@ if st.session_state.get("registro_ejecucion"):
 st.divider()
 st.subheader("Cronogramas exportados")
 
-carpeta_outputs = Path(__file__).resolve().parent / "outputs"
+carpeta_outputs = carpeta_outputs_sesion(
+    st.session_state.thread_id
+)
 
 if carpeta_outputs.exists():
 
-    archivos = [
-        archivo
-        for archivo in carpeta_outputs.iterdir()
-        if archivo.suffix.lower() in (".csv", ".xlsx")
-    ]
-
     archivos = sorted(
-        archivos,
+        [
+            archivo
+            for archivo in carpeta_outputs.iterdir()
+            if archivo.is_file()
+            and archivo.suffix.lower() in (".csv", ".xlsx")
+        ],
         key=lambda archivo: archivo.stat().st_mtime,
         reverse=True,
     )[:10]
 
     if archivos:
+
+        st.write(
+            f"Archivos disponibles: {len(archivos)}"
+        )
+
         for archivo in archivos:
-            tipo = (
-                "text/csv"
-                if archivo.suffix.lower() == ".csv"
-                else "application/vnd.openxmlformats.officedocument.spreadsheetml.sheet"
-            )
+
+            if archivo.suffix.lower() == ".csv":
+                tipo = "text/csv"
+            else:
+                tipo = (
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                )
 
             st.download_button(
                 label=f"Descargar {archivo.name}",
                 data=archivo.read_bytes(),
                 file_name=archivo.name,
                 mime=tipo,
-                key=f"descarga_{archivo.name}",
+                key=(
+                    f"descarga_{st.session_state.thread_id}_"
+                    f"{archivo.name}"
+                ),
             )
 
     else:
-        st.info("Todavia no hay cronogramas exportados.")
+        st.info(
+            "Esta conversacion todavia no tiene "
+            "cronogramas exportados."
+        )
+
 else:
-    st.info("Todavia no hay cronogramas exportados.")
+    st.info(
+        "Esta conversacion todavia no tiene "
+        "cronogramas exportados."
+    )
